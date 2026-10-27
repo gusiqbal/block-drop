@@ -1,0 +1,601 @@
+<title>Block Drop</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  /* Layout: one well (board) beside a narrow instrument column; stacks on phones. Single dark look by choice. */
+  :root {
+    --bg: #0f1420;
+    --panel: #171e2e;
+    --line: #2a3550;
+    --fg: #e6ebf5;
+    --muted: #8c97b0;
+    --accent: #f0a000;
+    --display: "Silkscreen", "Courier New", monospace;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--mono);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    padding-block: 16px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+  }
+  .game { display: flex; gap: 20px; align-items: flex-start; }
+  /* The well sits flat; the frame bevel is lit from the top left */
+  .well { position: relative; filter: drop-shadow(0 24px 22px rgba(0, 0, 0, .6)); }
+  #board { display: block; height: min(600px, 70vh); width: auto; aspect-ratio: 1 / 2; max-width: 100%;
+           background: #0a0e17; border: 8px solid; border-color: #46557a #1d2539 #121826 #34405f; }
+  .side { display: flex; flex-direction: column; gap: 14px; padding: 14px; background: var(--panel);
+          border: 1px solid var(--line); min-width: 150px;
+          box-shadow: 0 10px 24px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .06); }
+  h1 { font-family: var(--display); font-weight: 400; font-size: 22px; margin: 0; color: var(--accent);
+       text-shadow: 1px 1px 0 #a66f00, 2px 2px 0 #7a5200, 3px 3px 0 #4f3500, 4px 6px 8px rgba(0, 0, 0, .6); }
+  .stat { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+  .stat span:first-child, .label { color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
+  .stat span:last-child { font-weight: 600; }
+  #next { width: 96px; height: 96px; }
+  .keys { font-size: 12px; color: var(--muted); line-height: 1.7; }
+  kbd { font-family: var(--mono); color: var(--fg); border: 1px solid var(--line); padding: 0 4px; }
+  .overlay { position: absolute; inset: 8px; display: flex; flex-direction: column; gap: 14px; align-items: center;
+             justify-content: center; background: rgba(10, 14, 23, .82); text-align: center; padding: 12px; }
+  .overlay p { font-family: var(--display); font-size: 20px; margin: 0; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  button { font-family: var(--mono); font-size: 16px; padding: 10px 14px; min-width: 48px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--fg); cursor: pointer; touch-action: manipulation;
+           box-shadow: 0 4px 0 #0a0e17, inset 0 1px 0 rgba(255, 255, 255, .1); }
+  button:active { transform: translateY(3px); box-shadow: 0 1px 0 #0a0e17; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #start { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; box-shadow: 0 4px 0 #8a5c00; }
+  #start:active { box-shadow: 0 1px 0 #8a5c00; }
+  @media (max-width: 520px) {
+    .game { flex-direction: column-reverse; align-items: center; }
+    .side { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; min-width: 0; width: 100%; box-sizing: border-box; }
+    .keys, h1 { display: none; }
+    #board { height: min(600px, 58vh); }
+    #next { width: 64px; height: 64px; }
+  }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+</style>
+
+<div class="game">
+  <div class="well">
+    <canvas id="board" width="300" height="600"></canvas>
+    <div id="overlay" class="overlay">
+      <p id="overlay-text">Block Drop</p>
+      <button id="start" type="button">Start</button>
+    </div>
+  </div>
+  <div class="side">
+    <h1>Block Drop</h1>
+    <div class="stat"><span>Score</span><span id="score">0</span></div>
+    <div class="stat"><span>Lines</span><span id="lines">0</span></div>
+    <div class="stat"><span>Level</span><span id="level">1</span></div>
+    <div><div class="label">Next</div><canvas id="next" width="120" height="120"></canvas></div>
+    <div class="keys"><kbd>←</kbd> <kbd>→</kbd> move<br><kbd>↓</kbd> soft drop<br><kbd>↑</kbd> / <kbd>R</kbd> rotate<br><kbd>Space</kbd> hard drop<br><kbd>P</kbd> pause · <kbd>M</kbd> sound<br><kbd>Enter</kbd> start</div>
+  </div>
+</div>
+<div class="controls">
+  <button type="button" data-action="left" aria-label="Move left">◀</button>
+  <button type="button" data-action="down" aria-label="Soft drop">▼</button>
+  <button type="button" data-action="right" aria-label="Move right">▶</button>
+  <button type="button" data-action="rotate" aria-label="Rotate">↻</button>
+  <button type="button" data-action="drop">Drop</button>
+  <button type="button" data-action="pause">Pause</button>
+  <button type="button" data-action="restart">Restart</button>
+  <button type="button" data-action="mute" id="mute" aria-pressed="false">Sound on</button>
+</div>
+
+<script>
+const COLS = 10, ROWS = 20, BLOCK = 30;
+const boardCanvas = document.getElementById('board');
+const nextCanvas = document.getElementById('next');
+const ctx = boardCanvas.getContext('2d');
+const nextCtx = nextCanvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const linesEl = document.getElementById('lines');
+const levelEl = document.getElementById('level');
+const overlay = document.getElementById('overlay');
+const overlayText = document.getElementById('overlay-text');
+const startBtn = document.getElementById('start');
+
+const COLORS = ['', '#00f0f0', '#f0f000', '#a000f0', '#00f000', '#f00000', '#2050ff', '#f0a000'];
+const PIECES = [
+  { colorIndex: 1, matrix: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]] }, // I
+  { colorIndex: 6, matrix: [[1,0,0],[1,1,1],[0,0,0]] },                 // J
+  { colorIndex: 7, matrix: [[0,0,1],[1,1,1],[0,0,0]] },                 // L
+  { colorIndex: 2, matrix: [[1,1],[1,1]] },                             // O
+  { colorIndex: 4, matrix: [[0,1,1],[1,1,0],[0,0,0]] },                 // S
+  { colorIndex: 3, matrix: [[0,1,0],[1,1,1],[0,0,0]] },                 // T
+  { colorIndex: 5, matrix: [[1,1,0],[0,1,1],[0,0,0]] }                  // Z
+];
+const LINE_POINTS = [0, 100, 300, 500, 800];
+const muteBtn = document.getElementById('mute');
+
+let actx = null, master = null, muted = false;
+
+// ponytail: sounds are synthesised with Web Audio, so there are no sound files to load
+function tone(freq, dur, type, { to, at = 0, vol = .3 } = {}) {
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = .35;
+    master.connect(actx.destination);
+  }
+  if (actx.state === 'suspended') actx.resume();
+  const t = actx.currentTime + at;
+  const osc = actx.createOscillator();
+  const gain = actx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  if (to) osc.frequency.exponentialRampToValueAtTime(to, t + dur);
+  gain.gain.setValueAtTime(vol, t);
+  gain.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  osc.connect(gain).connect(master);
+  osc.start(t);
+  osc.stop(t + dur + .02);
+}
+
+const arpeggio = (notes, step, dur, type, vol, delay = 0) =>
+  notes.forEach((f, i) => tone(f, dur, type, { at: delay + i * step, vol }));
+
+const SOUNDS = {
+  move:   () => tone(180, .04, 'square', { vol: .12 }),
+  rotate: () => tone(520, .07, 'triangle', { to: 780, vol: .25 }),
+  lock:   () => tone(150, .1, 'sine', { to: 70, vol: .5 }),
+  drop:   () => tone(420, .14, 'sawtooth', { to: 60, vol: .2 }),
+  clear:  n => {
+    arpeggio([523, 659, 784, 988].slice(0, n + 1), .06, .12, 'square', .15 + n * .03);
+    tone(130, .18, 'sine', { to: 60, vol: .3 + n * .1 });
+  },
+  tetris: () => {
+    arpeggio([523, 659, 784, 1047, 1319, 1568], .06, .18, 'square', .22);
+    tone(110, .35, 'sine', { to: 45, vol: .7 });
+  },
+  level:  () => arpeggio([392, 523, 784], .09, .2, 'triangle', .3, .35),
+  over:   () => arpeggio([392, 330, 262, 196], .18, .3, 'triangle', .3),
+  pause:  () => tone(660, .08, 'sine', { vol: .25 }),
+  start:  () => arpeggio([262, 392, 523], .07, .12, 'triangle', .3)
+};
+
+function sfx(name, arg) {
+  if (muted) return;
+  try { SOUNDS[name](arg); } catch (e) { /* audio unavailable: keep playing silently */ }
+}
+
+function toggleMute() {
+  muted = !muted;
+  muteBtn.textContent = muted ? 'Sound off' : 'Sound on';
+  muteBtn.setAttribute('aria-pressed', String(muted));
+}
+
+let board = emptyBoard();
+let current = null, next = null;
+let score = 0, lines = 0, level = 1;
+let gameOver = false, paused = false;
+let dropInterval = 800, dropCounter = 0, lastTime = 0;
+
+function emptyBoard() {
+  return Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+}
+
+// ponytail: uniform random pieces, swap for a 7-bag if streaks of the same piece annoy players
+function randomPiece() {
+  const p = PIECES[Math.floor(Math.random() * PIECES.length)];
+  return {
+    matrix: p.matrix.map(row => row.slice()),
+    colorIndex: p.colorIndex,
+    x: Math.floor(COLS / 2) - Math.floor(p.matrix.length / 2),
+    y: 0
+  };
+}
+
+function rotate(matrix) {
+  const n = matrix.length;
+  const rotated = Array.from({ length: n }, () => Array(n).fill(0));
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) rotated[x][n - 1 - y] = matrix[y][x];
+  return rotated;
+}
+
+function collides(matrix, x, y) {
+  for (let py = 0; py < matrix.length; py++) {
+    for (let px = 0; px < matrix.length; px++) {
+      if (!matrix[py][px]) continue;
+      const bx = x + px, by = y + py;
+      if (bx < 0 || bx >= COLS || by >= ROWS) return true;
+      if (by >= 0 && board[by][bx]) return true;
+    }
+  }
+  return false;
+}
+
+function canPlay() {
+  return current !== null && !gameOver && !paused;
+}
+
+function move(dx) {
+  if (!canPlay() || collides(current.matrix, current.x + dx, current.y)) return;
+  current.x += dx;
+  sfx('move');
+}
+
+function softDrop() {
+  if (!canPlay()) return;
+  if (!collides(current.matrix, current.x, current.y + 1)) current.y++;
+  else lockPiece();
+  dropCounter = 0;
+}
+
+// ponytail: simple horizontal wall kicks, not full SRS tables
+function rotatePiece() {
+  if (!canPlay()) return;
+  const rotated = rotate(current.matrix);
+  for (const k of [0, -1, 1, -2, 2]) {
+    if (!collides(rotated, current.x + k, current.y)) {
+      current.matrix = rotated;
+      current.x += k;
+      sfx('rotate');
+      return;
+    }
+  }
+}
+
+function hardDrop() {
+  if (!canPlay()) return;
+  const startY = current.y;
+  while (!collides(current.matrix, current.x, current.y + 1)) current.y++;
+  trailFx(current, startY);
+  sfx('drop');
+  lockPiece(true);
+  dropCounter = 0;
+}
+
+function lockPiece(hard = false) {
+  let topOut = false;
+  current.matrix.forEach((row, py) => row.forEach((cell, px) => {
+    if (!cell) return;
+    const by = current.y + py;
+    if (by < 0) topOut = true;
+    else board[by][current.x + px] = current.colorIndex;
+  }));
+  if (topOut) return endGame();
+  landFx(current, hard);
+  const cleared = clearLines();
+  sfx(cleared === 4 ? 'tetris' : cleared ? 'clear' : 'lock', cleared);
+  current = next;
+  next = randomPiece();
+  if (collides(current.matrix, current.x, current.y)) endGame();
+}
+
+function clearLines() {
+  const full = [];
+  board.forEach((row, y) => { if (row.every(cell => cell !== 0)) full.push(y); });
+  const cleared = full.length;
+  if (!cleared) return 0;
+  clearFx(full); // before removal, so the effect can read the cleared rows' colours
+  board = board.filter((row, y) => !full.includes(y));
+  while (board.length < ROWS) board.unshift(Array(COLS).fill(0));
+  score += LINE_POINTS[cleared] * level;
+  lines += cleared;
+  const newLevel = Math.floor(lines / 10) + 1;
+  if (newLevel > level) sfx('level');
+  level = newLevel;
+  dropInterval = Math.max(100, 800 - (level - 1) * 70);
+  updateScore();
+  return cleared;
+}
+
+function endGame() {
+  gameOver = true;
+  current = null;
+  sfx('over');
+  showOverlay('Game over', 'Play again');
+}
+
+function togglePause() {
+  if (!current || gameOver) return;
+  paused = !paused;
+  sfx('pause');
+  if (paused) showOverlay('Paused', 'Resume');
+  else hideOverlay();
+}
+
+function reset() {
+  board = emptyBoard();
+  score = 0; lines = 0; level = 1;
+  gameOver = false; paused = false;
+  dropInterval = 800; dropCounter = 0;
+  current = randomPiece();
+  next = randomPiece();
+  hideOverlay();
+  updateScore();
+  sfx('start');
+}
+
+function showOverlay(text, buttonLabel) {
+  overlayText.textContent = text;
+  startBtn.textContent = buttonLabel;
+  overlay.hidden = false;
+}
+
+function hideOverlay() {
+  overlay.hidden = true;
+  startBtn.blur();
+}
+
+function updateScore() {
+  scoreEl.textContent = score;
+  linesEl.textContent = lines;
+  levelEl.textContent = level;
+}
+
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const rgb = [n >> 16, (n >> 8) & 255, n & 255]
+    .map(v => Math.round(amt > 0 ? v + (255 - v) * amt : v * (1 + amt)));
+  return `rgb(${rgb})`;
+}
+
+function polygon(context, color, points) {
+  context.fillStyle = color;
+  context.beginPath();
+  context.moveTo(points[0], points[1]);
+  for (let i = 2; i < points.length; i += 2) context.lineTo(points[i], points[i + 1]);
+  context.fill();
+}
+
+// Bevelled cube lit from the top left: top and left edges lighter, bottom and right darker
+function drawCell(context, x, y, colorIndex, ghost = false) {
+  const base = COLORS[colorIndex];
+  const l = x * BLOCK, t = y * BLOCK, r = l + BLOCK, b = t + BLOCK, e = 5;
+  if (ghost) {
+    context.save();
+    context.globalAlpha = 0.4;
+    context.strokeStyle = base;
+    context.lineWidth = 2;
+    context.strokeRect(l + 2, t + 2, BLOCK - 4, BLOCK - 4);
+    context.restore();
+    return;
+  }
+  const face = context.createLinearGradient(l, t, r, b);
+  face.addColorStop(0, shade(base, 0.2));
+  face.addColorStop(1, shade(base, -0.2));
+  context.fillStyle = face;
+  context.fillRect(l, t, BLOCK, BLOCK);
+  polygon(context, shade(base, 0.55), [l, t, r, t, r - e, t + e, l + e, t + e]);
+  polygon(context, shade(base, 0.3), [l, t, l + e, t + e, l + e, b - e, l, b]);
+  polygon(context, shade(base, -0.35), [r, t, r, b, r - e, b - e, r - e, t + e]);
+  polygon(context, shade(base, -0.55), [l, b, l + e, b - e, r - e, b - e, r, b]);
+  context.fillStyle = 'rgba(255,255,255,0.45)';
+  context.fillRect(l + e + 2, t + e + 2, 6, 3);
+  context.strokeStyle = 'rgba(0,0,0,0.5)';
+  context.lineWidth = 1;
+  context.strokeRect(l + 0.5, t + 0.5, BLOCK - 1, BLOCK - 1);
+}
+
+function drawGrid() {
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.beginPath();
+  for (let x = 1; x < COLS; x++) { ctx.moveTo(x * BLOCK + .5, 0); ctx.lineTo(x * BLOCK + .5, ROWS * BLOCK); }
+  for (let y = 1; y < ROWS; y++) { ctx.moveTo(0, y * BLOCK + .5); ctx.lineTo(COLS * BLOCK, y * BLOCK + .5); }
+  ctx.stroke();
+}
+
+function drawMatrix(matrix, ox, oy, colorIndex, ghost) {
+  matrix.forEach((row, py) => row.forEach((cell, px) => {
+    if (cell && oy + py >= 0) drawCell(ctx, ox + px, oy + py, colorIndex, ghost);
+  }));
+}
+
+// Effects, all in board pixels: particles, fading flash rectangles and floating labels
+const fx = { particles: [], flashes: [], labels: [] };
+const well = document.querySelector('.well');
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const CLEAR_FX = [
+  null,
+  { label: 'x1 SINGLE', color: '#e6ebf5', size: 22, sparks: 4, shake: 3 },
+  { label: 'x2 DOUBLE', color: '#00f0f0', size: 25, sparks: 6, shake: 6 },
+  { label: 'x3 TRIPLE', color: '#f0a000', size: 28, sparks: 9, shake: 9 },
+  { label: 'x4 TETRIS!', color: null, size: 32, sparks: 14, shake: 15 } // null colour = rainbow
+];
+let now = 0;
+
+function shake(mag, duration) {
+  if (REDUCED_MOTION) return;
+  const frames = [];
+  for (let i = 0; i < 6; i++) {
+    const m = mag * (1 - i / 6);
+    frames.push({ transform: `translate(${(Math.random() * 2 - 1) * m}px, ${(Math.random() * 2 - 1) * m}px)` });
+  }
+  frames.push({ transform: 'translate(0, 0)' });
+  well.animate(frames, { duration });
+}
+
+function spark(x, y, color, speed, count) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2, v = speed * (0.4 + Math.random());
+    fx.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - speed * 0.6,
+                        life: 1, color, size: 3 + Math.random() * 4 });
+  }
+}
+
+function flash(x, y, w, h, dur, color, alpha) {
+  fx.flashes.push({ x, y, w, h, t0: now, dur, color, alpha });
+}
+
+function trailFx(piece, startY) {
+  const dist = piece.y - startY;
+  if (dist <= 0) return;
+  for (let px = 0; px < piece.matrix.length; px++) {
+    const top = piece.matrix.findIndex(row => row[px]);
+    if (top >= 0) flash((piece.x + px) * BLOCK + 4, (startY + top) * BLOCK, BLOCK - 8, dist * BLOCK,
+                        220, COLORS[piece.colorIndex], 0.35);
+  }
+}
+
+function landFx(piece, hard) {
+  const dust = shade(COLORS[piece.colorIndex], 0.4);
+  piece.matrix.forEach((row, py) => row.forEach((cell, px) => {
+    if (!cell) return;
+    const x = (piece.x + px) * BLOCK, y = (piece.y + py) * BLOCK;
+    flash(x, y, BLOCK, BLOCK, 180, '#fff', 0.7);
+    if (!piece.matrix[py + 1]?.[px]) spark(x + BLOCK / 2, y + BLOCK, dust, hard ? 110 : 60, hard ? 4 : 2);
+  }));
+  if (hard) shake(4, 160);
+}
+
+// Bigger clears get more sparks, harder shake, a larger label; x4 also flashes the whole well
+function clearFx(rows) {
+  const n = rows.length, style = CLEAR_FX[n];
+  rows.forEach(y => {
+    flash(0, y * BLOCK, COLS * BLOCK, BLOCK, 350, '#fff', 0.9);
+    board[y].forEach((c, x) => {
+      const color = style.color ? COLORS[c] : COLORS[1 + Math.floor(Math.random() * 7)];
+      spark((x + 0.5) * BLOCK, (y + 0.5) * BLOCK, color, 120 + n * 60, style.sparks);
+    });
+  });
+  if (n === 4) flash(0, 0, COLS * BLOCK, ROWS * BLOCK, 450, '#fff', 0.5);
+  const y = (rows.reduce((sum, r) => sum + r, 0) / n + 0.5) * BLOCK;
+  fx.labels.push({ text: style.label, points: `+${LINE_POINTS[n] * level}`, color: style.color,
+                   size: style.size, t0: now, y });
+  shake(style.shake, 200 + n * 60);
+}
+
+function stepFx(dt) {
+  for (const p of fx.particles) {
+    p.vy += 900 * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt * 1.3;
+  }
+  fx.particles = fx.particles.filter(p => p.life > 0);
+  fx.flashes = fx.flashes.filter(f => now - f.t0 < f.dur);
+  fx.labels = fx.labels.filter(l => now - l.t0 < 1000);
+}
+
+function drawFx() {
+  for (const f of fx.flashes) {
+    ctx.globalAlpha = f.alpha * (1 - (now - f.t0) / f.dur);
+    ctx.fillStyle = f.color;
+    ctx.fillRect(f.x, f.y, f.w, f.h);
+  }
+  for (const p of fx.particles) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+  }
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  const cx = COLS * BLOCK / 2;
+  for (const l of fx.labels) {
+    const k = (now - l.t0) / 1000;
+    const pop = k < 0.12 ? 0.6 + (k / 0.12) * 0.55 : Math.max(1, 1.15 - (k - 0.12) * 1.5); // overshoot, then settle
+    const y = l.y - k * 40;
+    ctx.globalAlpha = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+    ctx.font = `${Math.round(l.size * pop)}px Silkscreen, monospace`;
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#07090f';
+    ctx.strokeText(l.text, cx, y, 280);
+    ctx.fillStyle = l.color || `hsl(${(now / 3) % 360} 100% 65%)`;
+    ctx.fillText(l.text, cx, y, 280);
+    ctx.font = '600 16px "IBM Plex Mono", monospace';
+    ctx.lineWidth = 4;
+    ctx.strokeText(l.points, cx, y + 28);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(l.points, cx, y + 28);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Well floor darkens towards the bottom for depth
+const WELL_BG = ctx.createLinearGradient(0, 0, 0, ROWS * BLOCK);
+WELL_BG.addColorStop(0, '#182033');
+WELL_BG.addColorStop(1, '#07090f');
+
+function draw() {
+  ctx.fillStyle = WELL_BG;
+  ctx.fillRect(0, 0, boardCanvas.width, boardCanvas.height);
+  drawGrid();
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++)
+      if (board[y][x]) drawCell(ctx, x, y, board[y][x]);
+  if (current) {
+    let gy = current.y;
+    while (!collides(current.matrix, current.x, gy + 1)) gy++;
+    drawMatrix(current.matrix, current.x, gy, current.colorIndex, true);
+    drawMatrix(current.matrix, current.x, current.y, current.colorIndex, false);
+  }
+  drawFx();
+  nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+  if (next) {
+    const offset = (4 - next.matrix.length) / 2;
+    next.matrix.forEach((row, py) => row.forEach((cell, px) => {
+      if (cell) drawCell(nextCtx, offset + px, offset + py, next.colorIndex);
+    }));
+  }
+}
+
+function update(time) {
+  const delta = Math.min(time - lastTime, 1000); // cap so a background tab does not dump pieces on return
+  lastTime = time;
+  now = time;
+  stepFx(delta / 1000);
+  if (canPlay()) {
+    dropCounter += delta;
+    while (current && dropCounter >= dropInterval) {
+      dropCounter -= dropInterval;
+      softDrop();
+    }
+  }
+  draw();
+  requestAnimationFrame(update);
+}
+
+function startOrResume() {
+  if (paused) togglePause();
+  else reset();
+}
+
+const ACTIONS = {
+  left: () => move(-1),
+  right: () => move(1),
+  down: softDrop,
+  rotate: rotatePiece,
+  drop: hardDrop,
+  pause: togglePause,
+  restart: reset,
+  mute: toggleMute
+};
+
+const KEYS = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowDown: 'down',
+  ArrowUp: 'rotate', KeyR: 'rotate', Space: 'drop', KeyP: 'pause', KeyM: 'mute'
+};
+
+window.addEventListener('keydown', e => {
+  if (e.code === 'Enter') {
+    e.preventDefault();
+    if (!current || gameOver || paused) startOrResume();
+    return;
+  }
+  const action = KEYS[e.code];
+  if (!action) return;
+  e.preventDefault();
+  ACTIONS[action]();
+});
+
+document.querySelectorAll('[data-action]').forEach(button => {
+  button.addEventListener('click', () => {
+    ACTIONS[button.dataset.action]();
+    button.blur(); // keep Space from re-clicking the focused button
+  });
+});
+startBtn.addEventListener('click', startOrResume);
+
+updateScore();
+requestAnimationFrame(t => { lastTime = t; update(t); });
+</script>
