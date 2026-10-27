@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Block Drop</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="theme-color" content="#0f1420">
@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
-  /* Layout: on phones the stats sit on top, the board fills the middle and thumb controls sit at the bottom;
+  /* Layout: on phones the stats sit on top and the board fills the rest (played by touch gestures);
      on wide screens the stats move beside the board. Single dark look by choice. */
   :root {
     --bg: #0f1420;
@@ -28,7 +28,7 @@
   body {
     background: var(--bg); color: var(--fg); font-family: var(--mono); font-size: 14px;
     display: grid;
-    grid-template: "hud" auto "stage" minmax(0, 1fr) "controls" auto / minmax(0, 1fr);
+    grid-template: "hud" auto "stage" minmax(0, 1fr) / minmax(0, 1fr);
     gap: 10px;
     padding-top: max(10px, env(safe-area-inset-top, 0px));
     padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
@@ -74,9 +74,6 @@
   .overlay-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
   .touch-only { display: none; }
 
-  .controls { grid-area: controls; display: grid; grid-template-columns: repeat(4, 1fr) 1.4fr; gap: 8px; }
-  .controls button { min-height: 58px; padding: 0; font-size: 22px; }
-
   button { font-family: var(--mono); font-size: 16px; padding: 10px 14px; border: 1px solid var(--line);
            background: var(--panel); color: var(--fg); cursor: pointer; touch-action: manipulation;
            box-shadow: 0 4px 0 #0a0e17, inset 0 1px 0 rgba(255, 255, 255, .1); }
@@ -90,13 +87,9 @@
     .touch-only { display: block; }
     .key-only { display: none; }
   }
-  /* Mouse and keyboard: the on-screen pad is not needed */
-  @media (hover: hover) and (pointer: fine) {
-    .controls { display: none; }
-  }
   /* Wide screens (desktop, tablet or phone in landscape): stats beside the board */
   @media (min-aspect-ratio: 1/1) and (min-width: 600px) {
-    body { grid-template: "stage hud" minmax(0, 1fr) "stage controls" auto / minmax(0, 1fr) minmax(170px, 240px);
+    body { grid-template: "stage hud" minmax(0, 1fr) / minmax(0, 1fr) minmax(170px, 240px);
            column-gap: 20px; width: min(100%, calc(50vh + 320px)); margin-inline: auto; }
     .hud { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; align-self: start;
            gap: 14px; padding: 14px; }
@@ -104,8 +97,6 @@
     .stats { flex-direction: column; gap: 8px; }
     .stat { flex-direction: row; justify-content: space-between; align-items: baseline; }
     #next { width: 96px; height: 96px; }
-    .controls { grid-template-columns: repeat(3, 1fr); }
-    .controls [data-action="drop"] { grid-column: span 2; }
   }
   @media (min-aspect-ratio: 1/1) and (min-width: 600px) and (hover: hover) and (pointer: fine) {
     .keys { display: block; }
@@ -116,7 +107,6 @@
     .hud { gap: 8px; padding: 10px; }
     .stats { gap: 4px; }
     #next { width: 44px; height: 44px; }
-    .controls button { min-height: 46px; }
   }
   @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
 </style>
@@ -155,14 +145,6 @@
     </div>
   </div>
 </main>
-
-<nav class="controls" aria-label="Game controls">
-  <button type="button" data-action="left" aria-label="Move left">◀&#xFE0E;</button>
-  <button type="button" data-action="down" aria-label="Soft drop">▼</button>
-  <button type="button" data-action="right" aria-label="Move right">▶&#xFE0E;</button>
-  <button type="button" data-action="rotate" aria-label="Rotate">↻</button>
-  <button type="button" data-action="drop">Drop</button>
-</nav>
 
 <script>
 const COLS = 10, ROWS = 20, BLOCK = 30; // BLOCK is the drawing unit; fit() scales it to the screen
@@ -703,21 +685,6 @@ window.addEventListener('keydown', e => {
   ACTIONS[action]();
 });
 
-// Game pad: pointerdown fires on touch without the tap delay, and a held button repeats like a held key
-const REPEATS = new Set(['left', 'right', 'down']);
-document.querySelectorAll('.controls [data-action]').forEach(button => {
-  const action = button.dataset.action;
-  let timer = 0;
-  const repeat = delay => { timer = setTimeout(() => { ACTIONS[action](); repeat(50); }, delay); };
-  const stop = () => clearTimeout(timer);
-  button.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    ACTIONS[action]();
-    if (REPEATS.has(action)) repeat(170);
-  });
-  ['pointerup', 'pointerleave', 'pointercancel'].forEach(type => button.addEventListener(type, stop));
-});
-
 // Tool buttons use click, because fullscreen and audio only start from a completed tap
 document.querySelectorAll('.tools [data-action]').forEach(button => {
   button.addEventListener('click', () => {
@@ -751,6 +718,13 @@ stage.addEventListener('pointerup', e => {
   touch = null;
 });
 stage.addEventListener('pointercancel', () => { touch = null; });
+
+// Block zoom: iOS Safari ignores user-scalable=no, so cancel its pinch gestures and multi-finger moves too
+['gesturestart', 'gesturechange', 'gestureend'].forEach(type =>
+  document.addEventListener(type, e => e.preventDefault()));
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+document.addEventListener('dblclick', e => e.preventDefault());
+window.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false }); // trackpad pinch
 
 // Pause when the phone switches apps or the tab is hidden
 document.addEventListener('visibilitychange', () => {
