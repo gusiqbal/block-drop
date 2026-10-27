@@ -3,24 +3,82 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Block Drop</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="theme-color" content="#0f1420">
+<meta name="theme-color" content="#02040c" id="theme-color">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
   /* Layout: on phones the stats sit on top and the board fills the rest (played by touch gestures);
-     on wide screens the stats move beside the board. Single dark look by choice. */
+     on wide screens the stats move beside the board. A painted scene sits behind everything.
+     Four scenes, picked by the viewer: the tokens below are Night aurora, the default. */
   :root {
-    --bg: #0f1420;
-    --panel: #171e2e;
-    --line: #2a3550;
-    --fg: #e6ebf5;
-    --muted: #8c97b0;
-    --accent: #f0a000;
+    --bg: #02040c;
+    --sky: linear-gradient(#02040c 0%, #06102a 40%, #0c1d3d 75%, #12294a 100%);
+    --panel: rgba(8, 14, 34, .8);
+    --shade: rgba(0, 0, 0, .45);
+    --line: rgba(120, 160, 255, .24);
+    --fg: #e6ecfa;
+    --muted: #93a4c8;
+    --accent: #5cf2b0;
+    --accent-ink: #04140d;
+    --accent-dk: #1f8a62;
+    --btn: rgba(20, 32, 64, .9);
+    --btn-shadow: #01030a;
+    --frame: #3a4f7e #17213d #0d1428 #2b3b62; /* top right bottom left: lit from the top left */
     --display: "Silkscreen", "Courier New", monospace;
     --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
     color-scheme: dark;
+  }
+  :root[data-scene="snow"] {
+    --bg: #dbe7f2;
+    --sky: linear-gradient(#b9cfe6 0%, #d8e5f1 45%, #edf3f9 75%, #f8fbfd 100%);
+    --panel: rgba(255, 255, 255, .78);
+    --shade: rgba(40, 70, 100, .18);
+    --line: rgba(70, 100, 130, .3);
+    --fg: #1c2b3b;
+    --muted: #536a82;
+    --accent: #2f7fd8;
+    --accent-ink: #ffffff;
+    --accent-dk: #1c4f8c;
+    --btn: rgba(255, 255, 255, .92);
+    --btn-shadow: rgba(60, 90, 120, .45);
+    --frame: #f6f9fc #9db3c9 #7f97b0 #d5e2ee;
+    color-scheme: light;
+  }
+  :root[data-scene="sunset"] {
+    --bg: #2a1a4a;
+    --sky: linear-gradient(#2a1a4a 0%, #6e2f6e 26%, #d6516b 48%, #ff9658 61%, #ffcf78 68%,
+                           #3e4a82 68%, #27305e 81%, #f0c99a 81%, #d8a676 100%);
+    --panel: rgba(40, 18, 50, .78);
+    --shade: rgba(20, 5, 20, .45);
+    --line: rgba(255, 170, 140, .3);
+    --fg: #fff1e6;
+    --muted: #e3b6a8;
+    --accent: #ff8a5c;
+    --accent-ink: #2a0f10;
+    --accent-dk: #a6452a;
+    --btn: rgba(62, 28, 72, .92);
+    --btn-shadow: #1a0a1f;
+    --frame: #d09070 #6e3b4e #4a2537 #a0606a;
+    color-scheme: dark;
+  }
+  :root[data-scene="lake"] {
+    --bg: #8fc1e3;
+    --sky: radial-gradient(circle at 85% 56%, rgba(255, 245, 216, .95) 0 3vmin, rgba(255, 226, 180, .45) 6vmin, transparent 22vmin),
+           linear-gradient(#8fc1e3 0%, #c4dfee 35%, #f6e6cc 57%, #f3d9b6 62%, #b4d6e4 62%, #8cbdd2 80%, #6aa0b8 100%);
+    --panel: rgba(255, 255, 255, .76);
+    --shade: rgba(30, 70, 80, .2);
+    --line: rgba(40, 90, 100, .28);
+    --fg: #17343a;
+    --muted: #4a6a70;
+    --accent: #1f9c8a;
+    --accent-ink: #ffffff;
+    --accent-dk: #11655a;
+    --btn: rgba(255, 255, 255, .92);
+    --btn-shadow: rgba(30, 70, 80, .4);
+    --frame: #edf5f1 #8aa9a0 #6b8b83 #c4d8d1;
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -39,15 +97,70 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Scene: sky gradient, one painted feature per scene in the pseudo-elements, moving particles on #sky */
+  .scene { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: var(--sky); }
+  .scene::before, .scene::after { content: ""; position: absolute; left: 0; right: 0; }
+  #sky { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hud, .stage { position: relative; z-index: 1; }
+
+  [data-scene="aurora"] .scene::before {
+    top: 0; height: 65%;
+    background:
+      radial-gradient(55% 35% at 25% 35%, rgba(70, 255, 170, .5), transparent 70%),
+      radial-gradient(45% 30% at 65% 25%, rgba(130, 90, 255, .4), transparent 70%),
+      radial-gradient(60% 25% at 50% 45%, rgba(40, 220, 210, .35), transparent 70%);
+    filter: blur(24px);
+    animation: aurora 16s ease-in-out infinite alternate;
+  }
+  [data-scene="aurora"] .scene::after {
+    bottom: 0; height: 22%; background: #04070f;
+    clip-path: polygon(0 60%, 8% 40%, 16% 55%, 27% 20%, 38% 50%, 47% 35%, 58% 62%, 70% 25%, 82% 52%, 91% 38%,
+                       100% 55%, 100% 100%, 0 100%);
+  }
+  @keyframes aurora {
+    0% { transform: translateX(-4%) skewX(-6deg); opacity: .75; }
+    50% { opacity: 1; }
+    100% { transform: translateX(5%) skewX(6deg); opacity: .85; }
+  }
+  [data-scene="snow"] .scene::before { /* a row of pines */
+    bottom: 18%; height: 70px; opacity: .8;
+    background: conic-gradient(from 160deg at 50% 0, #8aa3bb 0 40deg, transparent 0) 0 100% / 56px 70px repeat-x;
+  }
+  [data-scene="snow"] .scene::after { /* drifts */
+    bottom: 0; height: 24%;
+    background:
+      radial-gradient(90% 70% at 20% 100%, #ffffff 70%, transparent 71%),
+      radial-gradient(80% 60% at 85% 100%, #f2f7fb 70%, transparent 71%),
+      linear-gradient(#f6f9fc, #f6f9fc) 0 100% / 100% 40% no-repeat;
+  }
+  [data-scene="sunset"] .scene::before { /* the sun, half set on the horizon at 68%, off to the right of the board */
+    top: 0; height: 68%;
+    background: radial-gradient(circle at 82% 100%, #fff3c4 0 9vmin, rgba(255, 196, 120, .55) 9.5vmin, transparent 30vmin);
+  }
+  [data-scene="sunset"] .scene::after { /* foam where the sea meets the sand at 81% */
+    top: calc(81% - 3px); height: 6px;
+    background: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, .75), rgba(255, 255, 255, 0));
+  }
+  [data-scene="lake"] .scene::before { /* far mountains standing on the shore at 62% */
+    top: 38%; height: 24%; background: #8eaec6; opacity: .9;
+    clip-path: polygon(0 100%, 0 70%, 10% 45%, 22% 70%, 35% 20%, 48% 60%, 58% 40%, 70% 75%, 82% 30%, 92% 55%,
+                       100% 45%, 100% 100%);
+  }
+  [data-scene="lake"] .scene::after { /* tree line on the far shore */
+    top: calc(62% - 34px); height: 34px;
+    background: conic-gradient(from 160deg at 50% 0, #3f6b5c 0 40deg, transparent 0) 0 100% / 22px 34px repeat-x;
+  }
+
   /* Phone: stats over tools on the left, next piece on the right */
   .hud { grid-area: hud; display: grid; grid-template: "stats next" auto "tools next" auto / minmax(0, 1fr) auto;
          align-items: center; gap: 8px 12px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line);
-         box-shadow: 0 10px 24px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .06); }
+         box-shadow: 0 10px 24px var(--shade), inset 0 1px 0 rgba(255, 255, 255, .06); }
   .stats { grid-area: stats; }
   .next { grid-area: next; }
   .tools { grid-area: tools; }
   h1 { display: none; font-family: var(--display); font-weight: 400; font-size: 22px; margin: 0; color: var(--accent);
-       text-shadow: 1px 1px 0 #a66f00, 2px 2px 0 #7a5200, 3px 3px 0 #4f3500, 4px 6px 8px rgba(0, 0, 0, .6); }
+       text-shadow: 1px 1px 0 var(--accent-dk), 2px 2px 0 var(--accent-dk), 3px 3px 0 var(--accent-dk),
+                    4px 6px 8px var(--shade); }
   .stats { display: flex; gap: 16px; }
   .stat { display: flex; flex-direction: column; gap: 2px; min-width: 44px; font-variant-numeric: tabular-nums; }
   .stat:first-child { min-width: 64px; } /* room for a six-digit score, so nothing shifts mid-game */
@@ -55,33 +168,42 @@
   .label { color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
   .next { display: flex; flex-direction: column; gap: 4px; }
   .next .label { display: none; }
-  #next { width: 72px; height: 72px; }
-  .tools { display: flex; gap: 6px; }
+  #next { width: 64px; height: 64px; }
+  .tools { display: flex; gap: 6px; min-width: 0; }
   .tools button { min-width: 40px; min-height: 40px; padding: 0 10px; font-size: 15px; }
   .tools svg { display: block; width: 18px; height: 18px; margin: auto; }
+  #mute[aria-pressed="true"] { color: var(--muted); text-decoration: line-through; }
+  #theme { flex: 1 1 auto; min-width: 72px; max-width: 170px; min-height: 40px; padding: 0 26px 0 10px;
+           font: 13px var(--mono); color: var(--fg); border: 1px solid var(--line); border-radius: 0;
+           appearance: none; -webkit-appearance: none; cursor: pointer;
+           background: linear-gradient(45deg, transparent 50%, var(--fg) 50%) right 14px center / 5px 5px no-repeat,
+                       linear-gradient(135deg, var(--fg) 50%, transparent 50%) right 9px center / 5px 5px no-repeat,
+                       var(--btn);
+           box-shadow: 0 4px 0 var(--btn-shadow), inset 0 1px 0 rgba(255, 255, 255, .1); }
+  #theme:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .keys { display: none; margin: 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
   kbd { font-family: var(--mono); color: var(--fg); border: 1px solid var(--line); padding: 0 4px; }
 
   .stage { grid-area: stage; min-width: 0; min-height: 0; overflow: hidden; display: grid; place-items: center; }
   .well { position: relative; }
   /* Board size is set by fit() in the script; the bevelled frame is lit from the top left */
-  #board { display: block; background: #0a0e17; border: 8px solid; border-color: #46557a #1d2539 #121826 #34405f;
-           box-shadow: 0 16px 28px rgba(0, 0, 0, .55); }
+  #board { display: block; background: #0a0e17; border: 8px solid; border-color: var(--frame);
+           box-shadow: 0 16px 28px rgba(0, 0, 0, .5); }
   .overlay { position: absolute; inset: 8px; display: flex; flex-direction: column; gap: 14px; align-items: center;
-             justify-content: center; background: rgba(10, 14, 23, .82); text-align: center; padding: 12px; }
+             justify-content: center; background: rgba(8, 12, 22, .8); color: #f3f6fb; text-align: center; padding: 12px; }
   .overlay p { font-family: var(--display); font-size: 20px; margin: 0; }
-  .overlay .hint { font: 12px/1.5 var(--mono); color: var(--muted); max-width: 24ch; }
+  .overlay .hint { font: 12px/1.5 var(--mono); color: rgba(230, 236, 250, .72); max-width: 24ch; }
   .overlay-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
   .touch-only { display: none; }
 
   button { font-family: var(--mono); font-size: 16px; padding: 10px 14px; border: 1px solid var(--line);
-           background: var(--panel); color: var(--fg); cursor: pointer; touch-action: manipulation;
-           box-shadow: 0 4px 0 #0a0e17, inset 0 1px 0 rgba(255, 255, 255, .1); }
-  button:active { transform: translateY(3px); box-shadow: 0 1px 0 #0a0e17; }
+           background: var(--btn); color: var(--fg); cursor: pointer; touch-action: manipulation;
+           box-shadow: 0 4px 0 var(--btn-shadow), inset 0 1px 0 rgba(255, 255, 255, .1); }
+  button:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--btn-shadow); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  #start { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; font-size: 18px;
-           padding: 12px 26px; box-shadow: 0 4px 0 #8a5c00; }
-  #start:active { box-shadow: 0 1px 0 #8a5c00; }
+  #start { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600;
+           font-size: 18px; padding: 12px 26px; box-shadow: 0 4px 0 var(--accent-dk); }
+  #start:active { box-shadow: 0 1px 0 var(--accent-dk); }
 
   @media (pointer: coarse) {
     .touch-only { display: block; }
@@ -97,6 +219,8 @@
     .stats { flex-direction: column; gap: 8px; }
     .stat { flex-direction: row; justify-content: space-between; align-items: baseline; }
     #next { width: 96px; height: 96px; }
+    .tools { flex-wrap: wrap; }
+    #theme { flex-basis: 100%; max-width: none; }
   }
   @media (min-aspect-ratio: 1/1) and (min-width: 600px) and (hover: hover) and (pointer: fine) {
     .keys { display: block; }
@@ -108,8 +232,13 @@
     .stats { gap: 4px; }
     #next { width: 44px; height: 44px; }
   }
-  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    button:active { transform: none; }
+    .scene::before { animation: none !important; }
+  }
 </style>
+
+<div class="scene" aria-hidden="true"><canvas id="sky"></canvas></div>
 
 <header class="hud">
   <h1>Block Drop</h1>
@@ -121,14 +250,20 @@
   <div class="next"><span class="label">Next</span><canvas id="next" width="120" height="120"></canvas></div>
   <div class="tools">
     <button type="button" data-action="pause" aria-label="Pause">❚❚</button>
-    <button type="button" data-action="mute" id="mute" aria-label="Mute" aria-pressed="false">♪ On</button>
+    <button type="button" data-action="mute" id="mute" aria-label="Mute" aria-pressed="false">♪</button>
     <button type="button" data-action="fullscreen" id="fullscreen" aria-label="Fullscreen" aria-pressed="false">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
         <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>
       </svg>
     </button>
+    <select id="theme" aria-label="Theme">
+      <option value="snow">Snow</option>
+      <option value="aurora">Aurora</option>
+      <option value="sunset">Sunset</option>
+      <option value="lake">Lake</option>
+    </select>
   </div>
-  <p class="keys"><kbd>←</kbd> <kbd>→</kbd> move<br><kbd>↓</kbd> soft drop<br><kbd>↑</kbd> / <kbd>R</kbd> rotate<br><kbd>Space</kbd> hard drop<br><kbd>P</kbd> pause · <kbd>M</kbd> mute<br><kbd>F</kbd> fullscreen · <kbd>Enter</kbd> start</p>
+  <p class="keys"><kbd>←</kbd> <kbd>→</kbd> move<br><kbd>↓</kbd> soft drop<br><kbd>↑</kbd> / <kbd>R</kbd> rotate<br><kbd>Space</kbd> hard drop<br><kbd>P</kbd> pause · <kbd>M</kbd> mute<br><kbd>T</kbd> theme · <kbd>F</kbd> fullscreen<br><kbd>Enter</kbd> start</p>
 </header>
 
 <main class="stage" id="stage">
@@ -163,6 +298,8 @@ const startBtn = document.getElementById('start');
 const restartBtn = document.getElementById('restart');
 const muteBtn = document.getElementById('mute');
 const fsBtn = document.getElementById('fullscreen');
+const themeSelect = document.getElementById('theme');
+const themeMeta = document.getElementById('theme-color');
 
 const COLORS = ['', '#00f0f0', '#f0f000', '#a000f0', '#00f000', '#f00000', '#2050ff', '#f0a000'];
 const PIECES = [
@@ -229,7 +366,6 @@ function sfx(name, arg) {
 
 function toggleMute() {
   muted = !muted;
-  muteBtn.textContent = muted ? '♪ Off' : '♪ On';
   muteBtn.setAttribute('aria-pressed', String(muted));
 }
 
@@ -579,10 +715,117 @@ function drawFx() {
   ctx.globalAlpha = 1;
 }
 
-// Well floor darkens towards the bottom for depth
-const WELL_BG = ctx.createLinearGradient(0, 0, 0, ROWS * BLOCK);
-WELL_BG.addColorStop(0, '#182033');
-WELL_BG.addColorStop(1, '#07090f');
+// Themes: CSS paints the page and scenery; here are the board floor colours, the browser bar colour,
+// and the moving particles each scene draws on the #sky canvas behind everything.
+// Band heights (.68 to .81 sea, .62 lake) match the horizon stops in the CSS --sky gradients.
+const THEMES = {
+  snow:   { well: ['#2a4560', '#0e1a2a'], bar: '#b9cfe6' },
+  aurora: { well: ['#121c3c', '#03050e'], bar: '#02040c' },
+  sunset: { well: ['#38204c', '#140b1e'], bar: '#2a1a4a' },
+  lake:   { well: ['#1e3f49', '#0a1d23'], bar: '#8fc1e3' }
+};
+const THEME_KEY = 'block-drop-theme';
+const sky = document.getElementById('sky');
+const skyCtx = sky.getContext('2d');
+let scene = 'aurora', wellBg = null, skyParts = [], skyW = 0, skyH = 0;
+
+const SKY = {
+  snow: { // falling flakes that sway
+    count: 110,
+    make: () => ({ x: Math.random() * skyW, y: Math.random() * skyH, r: 1 + Math.random() * 2.5,
+                   v: 25 + Math.random() * 45, p: Math.random() * 6.28 }),
+    step: (f, dt, t) => {
+      f.y += f.v * dt;
+      f.x += Math.sin(t / 1000 + f.p) * 14 * dt;
+      if (f.y > skyH + 4) { f.y = -4; f.x = Math.random() * skyW; }
+    },
+    draw: f => {
+      skyCtx.globalAlpha = 0.85;
+      skyCtx.fillStyle = '#fff';
+      skyCtx.beginPath();
+      skyCtx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      skyCtx.fill();
+    }
+  },
+  aurora: { // twinkling stars above the ridge
+    count: 140,
+    make: () => ({ x: Math.random() * skyW, y: Math.random() * skyH * 0.75, r: 0.5 + Math.random() * 1.1,
+                   p: Math.random() * 6.28, s: 0.5 + Math.random() * 2 }),
+    step: () => {},
+    draw: (f, t) => {
+      skyCtx.globalAlpha = 0.3 + 0.7 * Math.abs(Math.sin(t / 1000 * f.s + f.p));
+      skyCtx.fillStyle = '#fff';
+      skyCtx.fillRect(f.x, f.y, f.r * 2, f.r * 2);
+    }
+  },
+  sunset: { // sun glints flickering on the sea, crowded under the sun (82% across, as in the CSS)
+    count: 70,
+    make: () => {
+      const spread = Math.random() < 0.7 ? 0.25 : 1;
+      return { x: skyW * 0.82 + (Math.random() - 0.5) * skyW * spread, y: skyH * (0.69 + Math.random() * 0.11),
+               w: 3 + Math.random() * 12, p: Math.random() * 6.28, s: 2 + Math.random() * 4 };
+    },
+    step: () => {},
+    draw: (f, t) => {
+      skyCtx.globalAlpha = Math.max(0, Math.sin(t / 1000 * f.s + f.p));
+      skyCtx.fillStyle = '#ffe2a8';
+      skyCtx.fillRect(f.x - f.w / 2, f.y, f.w, 1.5);
+    }
+  },
+  lake: { // slow ripples drifting across still water
+    count: 45,
+    make: () => ({ x: Math.random() * skyW, y: skyH * (0.64 + Math.random() * 0.34), w: 12 + Math.random() * 40,
+                   p: Math.random() * 6.28, s: 0.4 + Math.random() * 0.8, v: 3 + Math.random() * 6 }),
+    step: (f, dt) => { f.x += f.v * dt; if (f.x - f.w > skyW) f.x = -f.w; },
+    draw: (f, t) => {
+      skyCtx.globalAlpha = Math.max(0, 0.25 + 0.3 * Math.sin(t / 1000 * f.s + f.p));
+      skyCtx.fillStyle = '#fff';
+      skyCtx.fillRect(f.x - f.w / 2, f.y, f.w, 1.2);
+    }
+  }
+};
+
+function seedSky() {
+  skyParts = Array.from({ length: SKY[scene].count }, SKY[scene].make);
+}
+
+function fitSky() {
+  skyW = window.innerWidth;
+  skyH = window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5); // soft scenery, no need for full density
+  sky.width = Math.round(skyW * dpr);
+  sky.height = Math.round(skyH * dpr);
+  skyCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  seedSky();
+}
+
+function drawSky(dt) {
+  const s = SKY[scene], t = REDUCED_MOTION ? 0 : now;
+  skyCtx.clearRect(0, 0, skyW, skyH);
+  for (const part of skyParts) {
+    if (!REDUCED_MOTION) s.step(part, dt, t);
+    s.draw(part, t);
+  }
+  skyCtx.globalAlpha = 1;
+}
+
+function setTheme(key) {
+  if (!THEMES[key]) key = 'aurora';
+  scene = key;
+  root.dataset.scene = key;
+  themeSelect.value = key;
+  themeMeta.content = THEMES[key].bar;
+  wellBg = ctx.createLinearGradient(0, 0, 0, ROWS * BLOCK); // the well floor darkens towards the bottom
+  wellBg.addColorStop(0, THEMES[key].well[0]);
+  wellBg.addColorStop(1, THEMES[key].well[1]);
+  seedSky();
+  try { localStorage.setItem(THEME_KEY, key); } catch (e) { /* storage blocked: theme lasts this visit only */ }
+}
+
+function cycleTheme() {
+  const keys = Object.keys(THEMES);
+  setTheme(keys[(keys.indexOf(scene) + 1) % keys.length]);
+}
 
 function drawGrid() {
   ctx.strokeStyle = 'rgba(255,255,255,0.04)';
@@ -600,7 +843,7 @@ function drawMatrix(matrix, ox, oy, colorIndex, ghost) {
 }
 
 function draw() {
-  ctx.fillStyle = WELL_BG;
+  ctx.fillStyle = wellBg;
   ctx.fillRect(0, 0, COLS * BLOCK, ROWS * BLOCK);
   drawGrid();
   for (let y = 0; y < ROWS; y++)
@@ -649,6 +892,7 @@ function update(time) {
     }
   }
   draw();
+  drawSky(delta / 1000);
   requestAnimationFrame(update);
 }
 
@@ -665,12 +909,13 @@ const ACTIONS = {
   drop: hardDrop,
   pause: togglePause,
   mute: toggleMute,
-  fullscreen: toggleFullscreen
+  fullscreen: toggleFullscreen,
+  theme: cycleTheme
 };
 
 const KEYS = {
   ArrowLeft: 'left', ArrowRight: 'right', ArrowDown: 'down', ArrowUp: 'rotate', KeyR: 'rotate',
-  Space: 'drop', KeyP: 'pause', KeyM: 'mute', KeyF: 'fullscreen'
+  Space: 'drop', KeyP: 'pause', KeyM: 'mute', KeyF: 'fullscreen', KeyT: 'theme'
 };
 
 window.addEventListener('keydown', e => {
@@ -691,6 +936,10 @@ document.querySelectorAll('.tools [data-action]').forEach(button => {
     ACTIONS[button.dataset.action]();
     button.blur(); // keep Space from re-clicking the focused button
   });
+});
+themeSelect.addEventListener('change', () => {
+  setTheme(themeSelect.value);
+  themeSelect.blur(); // hand the arrow keys back to the game
 });
 startBtn.addEventListener('click', startOrResume);
 restartBtn.addEventListener('click', reset);
@@ -731,6 +980,11 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden && canPlay()) togglePause();
 });
 
+let savedTheme = null;
+try { savedTheme = localStorage.getItem(THEME_KEY); } catch (e) { /* storage blocked: use the default */ }
+fitSky();
+setTheme(savedTheme);
+window.addEventListener('resize', fitSky);
 updateScore();
 new ResizeObserver(fit).observe(stage);
 requestAnimationFrame(t => { lastTime = t; update(t); });
