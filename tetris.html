@@ -10,9 +10,10 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
   /* Layout: on phones the stats sit on top and the board fills the rest (played by touch gestures);
-     on wide screens the stats move beside the board. In 1v1 the second board sits beside the first on
-     wide screens and shrinks to a small preview on phones. A painted scene sits behind everything.
-     Four scenes, picked by the viewer: the tokens below are Night aurora, the default. */
+     on wide screens the stats move beside the board. In 1v1 the big board is always you: the opponent's
+     board sits beside it at full size on wide screens and shrinks to a small preview on phones.
+     A painted scene sits behind everything. Four scenes, picked by the viewer: the tokens below are
+     Night aurora, the default. */
   :root {
     --bg: #02040c;
     --sky: linear-gradient(#02040c 0%, #06102a 40%, #0c1d3d 75%, #12294a 100%);
@@ -198,9 +199,17 @@
            height: calc((100% - 2 * var(--b)) * var(--fill, 0)); background: #ff4757;
            box-shadow: 0 0 8px rgba(255, 71, 87, .8); transition: height .15s; }
   .overlay { position: absolute; inset: var(--b); display: flex; flex-direction: column; gap: 14px; align-items: center;
-             justify-content: center; background: rgba(8, 12, 22, .8); color: #f3f6fb; text-align: center; padding: 12px; }
+             justify-content: center; background: rgba(8, 12, 22, .82); color: #f3f6fb; text-align: center; padding: 12px; }
   .overlay p { font-family: var(--display); font-size: 20px; margin: 0; }
+  #overlay-text.big { font-size: 44px; letter-spacing: .12em; }
+  .overlay .info { font: 13px/1.5 var(--mono); color: rgba(230, 236, 250, .85); max-width: 26ch;
+                   user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
   .overlay .hint { font: 12px/1.5 var(--mono); color: rgba(230, 236, 250, .72); max-width: 24ch; }
+  #room-input { width: 6.5ch; padding: 8px 0; font: 28px var(--display); letter-spacing: .15em; text-align: center;
+                text-transform: uppercase; color: #fff; background: rgba(255, 255, 255, .08);
+                border: 2px solid rgba(255, 255, 255, .35); border-radius: 0;
+                user-select: text; -webkit-user-select: text; touch-action: manipulation; }
+  #room-input:focus { outline: none; border-color: var(--accent); }
   .overlay-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
   .touch-only { display: none; }
 
@@ -223,6 +232,7 @@
            column-gap: 20px; width: min(100%, calc(50vh + 320px)); margin-inline: auto; }
     body.versus { width: min(100%, calc(100vh + 340px)); }
     body.versus .rival { --b: 8px; }
+    body.local .rival { order: -1; } /* local 1v1: the WASD player sits on the left of the keyboard */
     .arena { gap: 20px; }
     .hud { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; align-self: start;
            gap: 14px; padding: 14px; }
@@ -278,26 +288,31 @@
   <p class="keys">
     <kbd>←</kbd> <kbd>→</kbd> move · <kbd>↓</kbd> soft drop<br><kbd>↑</kbd> / <kbd>R</kbd> rotate · <kbd>Space</kbd> drop<br>
     <kbd>P</kbd> pause · <kbd>M</kbd> mute · <kbd>T</kbd> theme<br><kbd>F</kbd> fullscreen · <kbd>Enter</kbd> start<br>
-    1v1: left <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> + <kbd>Space</kbd>,<br>right arrows + <kbd>Enter</kbd>
+    1v1 local friend: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>,<br>drop with <kbd>Q</kbd> or left <kbd>Shift</kbd>
   </p>
 </header>
 
 <main class="stage" id="stage">
   <div class="arena">
-  <div class="well" id="well-1">
-    <canvas class="board" id="board-1" width="300" height="600"></canvas>
-    <div class="meter" id="meter-1"></div>
-    <div id="overlay" class="overlay">
-      <p id="overlay-text">Block Drop</p>
-      <div class="overlay-actions" id="overlay-actions"></div>
-      <p class="hint touch-only">Tap the board to rotate, drag to move, flick down to drop</p>
-      <p class="hint key-only">Enter picks the highlighted option</p>
+    <div class="well" id="well-1">
+      <canvas class="board" id="board-1" width="300" height="600"></canvas>
+      <div class="meter" id="meter-1"></div>
+      <div id="overlay" class="overlay">
+        <p id="overlay-text">Block Drop</p>
+        <p class="info" id="overlay-info" hidden></p>
+        <input id="room-input" type="text" maxlength="4" autocomplete="off" autocapitalize="characters"
+               spellcheck="false" aria-label="Room code" hidden>
+        <div class="overlay-actions" id="overlay-actions"></div>
+        <div id="overlay-hints">
+          <p class="hint touch-only">Tap the board to rotate, drag to move, flick down to drop</p>
+          <p class="hint key-only">Enter picks the highlighted option</p>
+        </div>
+      </div>
     </div>
-  </div>
-  <div class="well rival" id="well-2">
-    <canvas class="board" id="board-2" width="300" height="600"></canvas>
-    <div class="meter" id="meter-2"></div>
-  </div>
+    <div class="well rival" id="well-2">
+      <canvas class="board" id="board-2" width="300" height="600"></canvas>
+      <div class="meter" id="meter-2"></div>
+    </div>
   </div>
 </main>
 
@@ -311,7 +326,10 @@ const levelEl = document.getElementById('level');
 const nextCanvas = document.getElementById('next');
 const overlay = document.getElementById('overlay');
 const overlayText = document.getElementById('overlay-text');
+const overlayInfo = document.getElementById('overlay-info');
+const overlayHints = document.getElementById('overlay-hints');
 const overlayActionsEl = document.getElementById('overlay-actions');
+const roomInput = document.getElementById('room-input');
 const muteBtn = document.getElementById('mute');
 const fsBtn = document.getElementById('fullscreen');
 const themeSelect = document.getElementById('theme');
@@ -376,6 +394,7 @@ const SOUNDS = {
   level:   () => arpeggio([392, 523, 784], .09, .2, 'triangle', .3, .35),
   over:    () => arpeggio([392, 330, 262, 196], .18, .3, 'triangle', .3),
   win:     () => arpeggio([523, 659, 784, 1047], .1, .25, 'triangle', .35),
+  tick:    () => tone(520, .08, 'square', { vol: .2 }),
   pause:   () => tone(660, .08, 'sine', { vol: .25 }),
   start:   () => arpeggio([262, 392, 523], .07, .12, 'triangle', .3)
 };
@@ -506,11 +525,12 @@ const CLEAR_FX = [
   { label: 'x4 TETRIS!', color: null, size: 32, sparks: 14, shake: 15 } // null colour = rainbow
 ];
 
-// Match state shared by both boards
+// Match state shared by both boards. Modes: solo, versus (local, one keyboard), online (room code).
 const match = { mode: 'solo', running: false };
 let paused = false, now = 0, lastTime = 0;
 
 // One player's board: state, rules, effects and drawing. Solo uses one; 1v1 uses two linked as opponents.
+// In online play the opponent's board is "remote": it never runs, it only shows what the other phone sends.
 class Game {
   constructor({ canvas, well, meter, name, nextCtx = null, showsStats = false }) {
     Object.assign(this, { canvas, well, meter, name, nextCtx, showsStats });
@@ -519,7 +539,9 @@ class Game {
     this.board = emptyBoard();
     this.current = null;
     this.next = null;
-    this.opponent = null;
+    this.opponent = null; // another Game, or an object with receive(rows) that sends over the network
+    this.remote = false;
+    this.onLock = null;
     this.over = false;
     this.banner = '';
     this.pending = 0; // garbage rows waiting to rise
@@ -535,8 +557,8 @@ class Game {
     this.score = 0; this.lines = 0; this.level = 1;
     this.over = false; this.banner = ''; this.pending = 0;
     this.dropInterval = 800; this.dropCounter = 0;
-    this.current = this.spawn();
-    this.next = this.spawn();
+    this.current = this.remote ? null : this.spawn();
+    this.next = this.remote ? null : this.spawn();
     this.updateMeter();
     this.updateStats();
   }
@@ -564,7 +586,7 @@ class Game {
   }
 
   canPlay() {
-    return match.running && !paused && !this.over && this.current !== null;
+    return match.running && !paused && !this.over && !this.remote && this.current !== null;
   }
 
   move(dx) {
@@ -622,6 +644,7 @@ class Game {
     if (this.over) return;
     this.current = this.next;
     this.next = this.spawn();
+    if (this.onLock) this.onLock();
     if (this.collides(this.current.matrix, this.current.x, this.current.y)) this.topOut();
   }
 
@@ -860,7 +883,7 @@ class Game {
       this.drawMatrix(piece.matrix, piece.x, piece.y, piece.colorIndex, false);
     }
     this.drawFx();
-    if (match.mode === 'versus') this.drawVersusMarks();
+    if (match.mode !== 'solo') this.drawVersusMarks();
     if (this.nextCtx) {
       const nc = this.nextCtx;
       nc.clearRect(0, 0, nc.canvas.width, nc.canvas.height);
@@ -869,6 +892,7 @@ class Game {
   }
 
   // 1v1 only: player name, a small next piece for the board without the stats panel, and the result banner
+  // (the banner only ever goes on the opponent's board; your result is in the overlay on yours)
   drawVersusMarks() {
     const ctx = this.ctx;
     ctx.globalAlpha = 0.4;
@@ -899,19 +923,20 @@ class Game {
   }
 }
 
+// p1 is always you: the big board, the stats panel, your keys and touch. p2 is the opponent.
 const p1 = new Game({ canvas: document.getElementById('board-1'), well: document.getElementById('well-1'),
                       meter: document.getElementById('meter-1'), name: 'P1',
                       nextCtx: nextCanvas.getContext('2d'), showsStats: true });
 const p2 = new Game({ canvas: document.getElementById('board-2'), well: document.getElementById('well-2'),
                       meter: document.getElementById('meter-2'), name: 'P2' });
-const players = () => (match.mode === 'versus' ? [p1, p2] : [p1]);
+const players = () => (match.mode === 'solo' ? [p1] : [p1, p2]);
 
 // Board sizes. Solo: one board fills the stage. 1v1 wide: two equal boards. 1v1 narrow: your board plus a
 // preview at a sixth of its cell size (frames: 16px for a full board, 8px for the preview).
 function fit() {
   const w = stage.clientWidth, h = stage.clientHeight, gap = WIDE.matches ? 20 : 10;
   const cellFor = (width, height) => Math.max(4, Math.floor(Math.min(width / COLS, height / ROWS)));
-  if (match.mode !== 'versus') return p1.resize(cellFor(w - 16, h - 16));
+  if (match.mode === 'solo') return p1.resize(cellFor(w - 16, h - 16));
   if (WIDE.matches) {
     const cell = cellFor((w - 32 - gap) / 2, h - 16);
     p1.resize(cell);
@@ -923,10 +948,15 @@ function fit() {
   p2.resize(Math.max(3, Math.floor(cell / 6)));
 }
 
-// Overlay: a title and buttons; Enter runs the first (highlighted) one
+// Overlay: a title, optional info line and code box, and buttons; Enter runs the first (highlighted) one
 let overlayActions = [];
-function showOverlay(text, actions) {
+function showOverlay(text, actions, { info = '', input = false, big = false, hints = false } = {}) {
   overlayText.textContent = text;
+  overlayText.classList.toggle('big', big);
+  overlayInfo.textContent = info;
+  overlayInfo.hidden = !info;
+  roomInput.hidden = !input;
+  overlayHints.hidden = !hints;
   overlayActions = actions;
   overlayActionsEl.replaceChildren(...actions.map((action, i) => {
     const button = document.createElement('button');
@@ -944,44 +974,285 @@ function hideOverlay() {
   overlay.hidden = true;
 }
 
-const SOLO = { label: 'Solo', run: () => startMatch('solo') };
-const VERSUS = { label: '1v1 local', run: () => startMatch('versus'), keyOnly: true };
+function setInfo(text) {
+  overlayInfo.textContent = text;
+  overlayInfo.hidden = !text;
+}
 
-function startMatch(mode) {
+const SOLO = { label: 'Solo', run: () => startMatch('solo') };
+const ONLINE = { label: 'Play online', run: () => onlineMenu() };
+const LOCAL = { label: '1v1 local', run: () => startMatch('versus'), keyOnly: true };
+const MENU = { label: 'Menu', run: () => showMenu() };
+
+function showMenu() {
+  match.running = false;
+  paused = false;
+  showOverlay('Block Drop', [SOLO, ONLINE, LOCAL], { hints: true });
+}
+
+function startMatch(mode, seed = Math.floor(Math.random() * 2 ** 32)) {
   match.mode = mode;
   match.running = true;
   paused = false;
-  document.body.classList.toggle('versus', mode === 'versus');
-  const seed = Math.floor(Math.random() * 2 ** 32);
-  p1.opponent = mode === 'versus' ? p2 : null;
+  document.body.classList.toggle('versus', mode !== 'solo');
+  document.body.classList.toggle('local', mode === 'versus');
+  p1.name = mode === 'online' ? 'YOU' : 'P1';
+  p2.name = mode === 'online' ? 'RIVAL' : 'P2';
+  p2.remote = mode === 'online';
+  p1.opponent = mode === 'versus' ? p2 : mode === 'online' ? remoteOpponent : null;
   p2.opponent = mode === 'versus' ? p1 : null;
+  p1.onLock = mode === 'online' ? sendBoard : null;
   players().forEach(game => game.start(seed));
   hideOverlay();
   fit();
   sfx('start');
+  if (mode === 'online') sendBoard();
 }
 
 function onTopOut(loser) {
+  if (match.mode === 'online') {
+    if (loser === p1) send({ t: 'over' });
+    return finishOnline(loser !== p1);
+  }
   match.running = false;
-  if (match.mode !== 'versus') {
-    showOverlay('Game over', [{ label: 'Play again', run: () => startMatch('solo') }, VERSUS]);
+  if (match.mode === 'solo') {
+    showOverlay('Game over', [{ label: 'Play again', run: () => startMatch('solo') }, MENU]);
     return;
   }
-  const winner = loser === p1 ? p2 : p1;
-  winner.banner = 'WINNER';
-  loser.banner = 'TOPPED OUT';
+  const youWon = loser === p2;
+  p2.banner = youWon ? 'TOPPED OUT' : 'WINNER';
   sfx('win');
-  showOverlay(`${winner === p1 ? 'Player 1' : 'Player 2'} wins`,
-              [{ label: 'Rematch', run: () => startMatch('versus') }, SOLO]);
+  showOverlay(youWon ? 'Player 1 wins' : 'Player 2 wins', [{ label: 'Rematch', run: () => startMatch('versus') }, MENU]);
 }
 
 function togglePause() {
-  if (!match.running) return;
+  if (!match.running || match.mode === 'online') return; // an online match cannot be paused
   paused = !paused;
   sfx('pause');
   if (paused) showOverlay('Paused', [{ label: 'Resume', run: togglePause },
-                                     { label: 'Restart', run: () => startMatch(match.mode) }]);
+                                     { label: 'Restart', run: () => startMatch(match.mode) }, MENU]);
   else hideOverlay();
+}
+
+// Online 1v1 over a direct connection. A room code is a PeerJS ID: the free PeerJS service only finds the
+// other phone from the code and swaps connection details once; game messages then go phone to phone.
+// Messages: ready, start {seed}, board {b: 200 digits, p: garbage waiting}, attack {n}, over.
+const PEERJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js';
+const ROOM_PREFIX = 'blockdrop-';
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I/L: easy to read out loud
+const CONNECT_TIMEOUT = 15000;
+let net = null; // { peer, conn, role: 'host' | 'guest', code, meReady, themReady }
+let peerLib = null;
+
+const remoteOpponent = { receive: rows => send({ t: 'attack', n: rows }) };
+const encodeBoard = board => board.map(row => row.join('')).join('');
+const decodeBoard = text => Array.from({ length: ROWS }, (_, y) => Array.from(text.slice(y * COLS, (y + 1) * COLS), Number));
+const makeCode = () => Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
+const cleanCode = text => String(text || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+const inviteLink = code => `${location.origin}${location.pathname}?room=${code}`;
+
+function send(message) {
+  if (net && net.conn && net.conn.open) net.conn.send(message);
+}
+
+function sendBoard() {
+  send({ t: 'board', b: encodeBoard(p1.board), p: p1.pending });
+}
+
+function loadPeer() {
+  if (window.Peer) return Promise.resolve();
+  peerLib = peerLib || new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = PEERJS_URL;
+    script.onload = resolve;
+    script.onerror = () => { peerLib = null; reject(new Error('load')); };
+    document.head.appendChild(script);
+  });
+  return peerLib;
+}
+
+function onlineMenu() {
+  showOverlay('Play online', [{ label: 'Create room', run: createRoom }, { label: 'Join room', run: () => joinMenu() }, MENU],
+              { info: 'Play a friend on another phone or computer' });
+}
+
+function joinMenu(code = '') {
+  showOverlay('Join room', [{ label: 'Join', run: () => joinRoom(roomInput.value) }, { label: 'Back', run: onlineMenu }],
+              { input: true, info: 'Type the 4-character code from your friend' });
+  roomInput.value = cleanCode(code);
+  if (!matchMedia('(pointer: coarse)').matches) roomInput.focus(); // on phones, wait for a tap to open the keyboard
+}
+
+async function createRoom() {
+  leaveOnline(false);
+  showOverlay('Creating room', [{ label: 'Cancel', run: () => leaveOnline() }]);
+  try { await loadPeer(); } catch (e) { return netError('Could not load the connection code. Check your internet connection.'); }
+  openRoom();
+}
+
+function openRoom() {
+  const code = makeCode();
+  const peer = new Peer(ROOM_PREFIX + code, { debug: 0 });
+  net = { peer, conn: null, role: 'host', code, meReady: false, themReady: false };
+  peer.on('open', () => {
+    if (net?.peer !== peer) return;
+    showOverlay(code, [{ label: 'Copy invite link', run: copyInvite }, { label: 'Cancel', run: () => leaveOnline() }],
+                { big: true, info: 'Your room code. Your friend taps Join room and types it, or opens the invite link.' });
+  });
+  peer.on('connection', conn => {
+    if (net?.peer !== peer) return;
+    if (net.conn) { conn.on('open', () => conn.close()); return; } // the room already has two players
+    attachConnection(conn);
+  });
+  peer.on('error', err => {
+    if (net?.peer !== peer) return;
+    if (err.type === 'unavailable-id') { peer.destroy(); openRoom(); return; } // code taken: pick another
+    if (!net.conn) netError(describeError(err));
+  });
+}
+
+function copyInvite() {
+  const link = inviteLink(net.code);
+  const fallback = () => setInfo(`Copy this link: ${link}`);
+  try {
+    navigator.clipboard.writeText(link).then(() => setInfo('Invite link copied. Send it to your friend.'), fallback);
+  } catch (e) { fallback(); }
+}
+
+async function joinRoom(text) {
+  const code = cleanCode(text);
+  if (code.length !== 4) { setInfo('The code has 4 characters'); return; }
+  leaveOnline(false);
+  showOverlay(`Joining ${code}`, [{ label: 'Cancel', run: () => leaveOnline() }]);
+  try { await loadPeer(); } catch (e) { return netError('Could not load the connection code. Check your internet connection.'); }
+  const peer = new Peer({ debug: 0 });
+  net = { peer, conn: null, role: 'guest', code, meReady: false, themReady: false };
+  peer.on('open', () => {
+    if (net?.peer !== peer) return;
+    attachConnection(peer.connect(ROOM_PREFIX + code, { reliable: true }));
+  });
+  peer.on('error', err => {
+    if (net?.peer !== peer) return;
+    if (!net.conn || !net.conn.open) netError(describeError(err, code));
+  });
+}
+
+function attachConnection(conn) {
+  net.conn = conn;
+  const timer = setTimeout(() => {
+    if (net?.conn === conn && !conn.open) {
+      netError('Could not connect to your friend directly. Some mobile and office networks block this. Try Wi-Fi on both phones.');
+    }
+  }, CONNECT_TIMEOUT);
+  conn.on('open', () => {
+    clearTimeout(timer);
+    if (net?.conn !== conn) return;
+    history.replaceState(null, '', location.pathname); // drop ?room= so a reload does not try to rejoin
+    showLobby();
+  });
+  conn.on('data', message => { if (net?.conn === conn) onMessage(message); });
+  conn.on('close', () => { if (net?.conn === conn) onFriendLeft(); });
+}
+
+function showLobby() {
+  showOverlay('Connected', [{ label: 'Ready', run: setReady }, { label: 'Leave', run: () => leaveOnline() }],
+              { info: `Room ${net.code}. Tap Ready when you are both set.` });
+}
+
+function setReady() {
+  net.meReady = true;
+  send({ t: 'ready' });
+  showOverlay(net.themReady ? 'Starting' : 'Ready', [{ label: 'Leave', run: () => leaveOnline() }],
+              { info: net.themReady ? '' : 'Waiting for your friend to tap Ready' });
+  maybeStart();
+}
+
+// The host picks the seed once both players are ready, so both boards get the same pieces
+function maybeStart() {
+  if (net.role !== 'host' || !net.meReady || !net.themReady) return;
+  const seed = Math.floor(Math.random() * 2 ** 32);
+  send({ t: 'start', seed });
+  countdown(seed);
+}
+
+function countdown(seed, n = 3) {
+  net.meReady = net.themReady = false;
+  showOverlay(String(n), [], { big: true, info: 'Get ready' });
+  sfx('tick');
+  setTimeout(() => {
+    if (!net || !net.conn) return; // left during the countdown
+    if (n > 1) countdown(seed, n - 1);
+    else startMatch('online', seed);
+  }, 1000);
+}
+
+// Everything from the other phone is untrusted: check each message before using it
+function onMessage(message) {
+  if (!message || typeof message !== 'object') return;
+  switch (message.t) {
+    case 'ready':
+      net.themReady = true;
+      if (!net.meReady && !match.running) setInfo('Your friend is ready');
+      maybeStart();
+      break;
+    case 'start':
+      if (net.role === 'guest' && Number.isInteger(message.seed) && message.seed >= 0) countdown(message.seed);
+      break;
+    case 'board':
+      if (typeof message.b === 'string' && /^[0-8]{200}$/.test(message.b)) p2.board = decodeBoard(message.b);
+      if (Number.isInteger(message.p) && message.p >= 0 && message.p <= 99) { p2.pending = message.p; p2.updateMeter(); }
+      break;
+    case 'attack':
+      if (match.running && [1, 2, 4].includes(message.n)) p1.receive(message.n);
+      break;
+    case 'over':
+      if (match.running) { p2.over = true; finishOnline(true); }
+      break;
+  }
+}
+
+function finishOnline(youWon) {
+  match.running = false;
+  p2.banner = youWon ? 'TOPPED OUT' : 'WINNER';
+  if (youWon) sfx('win');
+  showOverlay(youWon ? 'You win' : 'You lose', [{ label: 'Rematch', run: setReady }, { label: 'Leave', run: () => leaveOnline() }],
+              { info: net?.themReady ? 'Your friend wants a rematch' : '' });
+}
+
+function onFriendLeft() {
+  net.conn = null;
+  match.running = false;
+  showOverlay('Your friend left', [{ label: 'Menu', run: () => leaveOnline() }]);
+}
+
+function netError(message) {
+  if (net?.conn) net.conn.close();
+  if (net?.peer) net.peer.destroy();
+  net = null;
+  showOverlay('Could not connect', [{ label: 'Try again', run: onlineMenu }, MENU], { info: message });
+}
+
+function describeError(err, code) {
+  switch (err.type) {
+    case 'peer-unavailable': return `There is no room ${code}. Check the code with your friend.`;
+    case 'browser-incompatible': return 'This browser cannot make direct connections. Try Chrome or Safari.';
+    case 'network': case 'server-error': case 'socket-error': case 'socket-closed':
+      return 'Could not reach the room service. Check your internet connection. Previews inside other apps can block it: open the game in your browser.';
+    default: return 'Something went wrong while connecting. Try again.';
+  }
+}
+
+// Close the connection and the room; showMenuAfter=false when another online step follows straight away
+function leaveOnline(showMenuAfter = true) {
+  const old = net;
+  net = null;
+  if (old?.conn) old.conn.close();
+  if (old?.peer) old.peer.destroy();
+  if (!showMenuAfter) return;
+  match.mode = 'solo';
+  document.body.classList.remove('versus', 'local');
+  fit();
+  showMenu();
 }
 
 // Scenery and themes. CSS paints the page and the still scenery; here are the board floor colours, the
@@ -1108,7 +1379,8 @@ function update(time) {
   requestAnimationFrame(update);
 }
 
-// Keys. Solo: arrows, R and Space. 1v1 local: left board WASD + Space, right board arrows + Enter.
+// Keys. You (the big board) always play with the solo keys: arrows, R and Space.
+// Local 1v1 friend: W A S D, hard drop with Q or left Shift.
 const MOVES = {
   left: game => game.move(-1),
   right: game => game.move(1),
@@ -1116,14 +1388,10 @@ const MOVES = {
   rotate: game => game.rotate(),
   drop: game => game.hardDrop()
 };
-const SOLO_KEYS = {
+const YOUR_KEYS = {
   ArrowLeft: 'left', ArrowRight: 'right', ArrowDown: 'down', ArrowUp: 'rotate', KeyR: 'rotate', Space: 'drop'
 };
-const VERSUS_KEYS = {
-  KeyA: [p1, 'left'], KeyD: [p1, 'right'], KeyS: [p1, 'down'], KeyW: [p1, 'rotate'], Space: [p1, 'drop'],
-  ArrowLeft: [p2, 'left'], ArrowRight: [p2, 'right'], ArrowDown: [p2, 'down'], ArrowUp: [p2, 'rotate'],
-  Enter: [p2, 'drop']
-};
+const FRIEND_KEYS = { KeyA: 'left', KeyD: 'right', KeyS: 'down', KeyW: 'rotate', KeyQ: 'drop', ShiftLeft: 'drop' };
 const TOOLS = { pause: togglePause, mute: toggleMute, fullscreen: toggleFullscreen, theme: cycleTheme };
 const TOOL_KEYS = { KeyP: 'pause', KeyM: 'mute', KeyF: 'fullscreen', KeyT: 'theme' };
 
@@ -1133,18 +1401,22 @@ window.addEventListener('keydown', e => {
     overlayActions[0]?.run();
     return;
   }
+  if (e.target.closest('input')) return; // typing a room code
   if (TOOL_KEYS[e.code]) {
     e.preventDefault();
     TOOLS[TOOL_KEYS[e.code]]();
     return;
   }
-  const versusMove = match.mode === 'versus' && VERSUS_KEYS[e.code];
-  const soloMove = match.mode !== 'versus' && SOLO_KEYS[e.code];
-  if (!versusMove && !soloMove) return;
-  e.preventDefault();
-  if (versusMove) MOVES[versusMove[1]](versusMove[0]);
-  else MOVES[soloMove](p1);
+  if (YOUR_KEYS[e.code]) {
+    e.preventDefault();
+    MOVES[YOUR_KEYS[e.code]](p1);
+  } else if (match.mode === 'versus' && FRIEND_KEYS[e.code]) {
+    e.preventDefault();
+    MOVES[FRIEND_KEYS[e.code]](p2);
+  }
 });
+
+roomInput.addEventListener('input', () => { roomInput.value = cleanCode(roomInput.value); });
 
 // Tool buttons use click, because fullscreen and audio only start from a completed tap
 document.querySelectorAll('.tools [data-action]').forEach(button => {
@@ -1162,7 +1434,7 @@ themeSelect.addEventListener('change', () => {
 // flick down to hard drop, tap to rotate
 let touch = null;
 stage.addEventListener('pointerdown', e => {
-  if (e.target.closest('button')) return;
+  if (e.target.closest('button, input')) return;
   touch = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false };
   stage.setPointerCapture(e.pointerId);
 });
@@ -1190,9 +1462,9 @@ document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preven
 document.addEventListener('dblclick', e => e.preventDefault());
 window.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false }); // trackpad pinch
 
-// Pause when the phone switches apps or the tab is hidden
+// Pause when the phone switches apps or the tab is hidden (online matches keep going)
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && match.running && !paused) togglePause();
+  if (document.hidden && match.running && !paused && match.mode !== 'online') togglePause();
 });
 
 let savedTheme = null;
@@ -1201,7 +1473,9 @@ fitSky();
 setTheme(savedTheme);
 window.addEventListener('resize', fitSky);
 WIDE.addEventListener('change', fit);
-showOverlay('Block Drop', [SOLO, VERSUS]);
+const invitedTo = cleanCode(new URLSearchParams(location.search).get('room'));
+if (invitedTo.length === 4) joinMenu(invitedTo);
+else showMenu();
 new ResizeObserver(fit).observe(stage);
 requestAnimationFrame(t => { lastTime = t; update(t); });
 </script>
